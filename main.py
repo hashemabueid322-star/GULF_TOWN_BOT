@@ -13,9 +13,9 @@ def home(): return "Gulf Town RP is Online!"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run).start()
 
-# --- إعدادات البوت ---
+# --- إعدادات البوت والـ Intents ---
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True # تأكد من تفعيلها في موقع المطورين
 intents.members = True
 bot = commands.Bot(command_prefix='-', intents=intents)
 
@@ -23,7 +23,7 @@ bot = commands.Bot(command_prefix='-', intents=intents)
 RP_ROLE_ID = 1479535297917354077     # رتبة الـ RP
 STAFF_ROLE_ID = 1479535409863201014   # رتبة الإدارة
 
-# --- نظام مراجعة الهوية ---
+# --- [1] نظام مراجعة الهوية (قبول/رفض) ---
 class IdentityReview(discord.ui.View):
     def __init__(self, applicant):
         super().__init__(timeout=None)
@@ -33,12 +33,10 @@ class IdentityReview(discord.ui.View):
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.guild.get_role(STAFF_ROLE_ID) not in interaction.user.roles:
             return await interaction.response.send_message("❌ للإدارة فقط!", ephemeral=True)
-        
-        rp_role = interaction.guild.get_role(RP_ROLE_ID)
-        if rp_role:
-            await self.applicant.add_roles(rp_role)
-            await interaction.message.delete()
-            await interaction.channel.send(f"✅ تم قبول هوية {self.applicant.mention} ومنحه رتبة الـ RP!")
+        role = interaction.guild.get_role(RP_ROLE_ID)
+        await self.applicant.add_roles(role)
+        await interaction.message.delete()
+        await interaction.channel.send(f"✅ تم قبول هوية {self.applicant.mention} ومنحه رتبة الـ RP!")
 
     @discord.ui.button(label="رفض ❌", style=discord.ButtonStyle.danger)
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -47,7 +45,7 @@ class IdentityReview(discord.ui.View):
         await interaction.message.delete()
         await interaction.channel.send(f"❌ تم رفض طلب هوية {self.applicant.mention}.")
 
-# --- نظام الرحلات (Modal) ---
+# --- [2] نظام الرحلات (أزرار مستقلة) ---
 class TripModal(discord.ui.Modal, title="إنشاء رحلة جديدة ✈️"):
     time = discord.ui.TextInput(label="الموعد", placeholder="مثال: 10:00 مساءً")
     helper = discord.ui.TextInput(label="المساعد", placeholder="اسم المساعد")
@@ -60,7 +58,16 @@ class TripModal(discord.ui.Modal, title="إنشاء رحلة جديدة ✈️")
         embed.add_field(name="📝 التفاصيل:", value=self.details.value, inline=False)
         await interaction.response.send_message(content="@everyone", embed=embed)
 
-# --- نظام التذاكر ---
+class TripControl(discord.ui.View):
+    def __init__(self): super().__init__(timeout=None)
+    @discord.ui.button(label="بدأ رحلة ✈️", style=discord.ButtonStyle.success)
+    async def start_trip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TripModal())
+    @discord.ui.button(label="إعلان إعصار 🌪️", style=discord.ButtonStyle.danger)
+    async def storm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🌪️ **تحذير! إعصار قادم لمدينة الخليج.. استعدوا!**", content="@everyone")
+
+# --- [3] نظام التذاكر (استلام وإغلاق) ---
 class TicketControl(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -81,59 +88,60 @@ class TicketControl(discord.ui.View):
             return await interaction.response.send_message("❌ فقط المستلم يغلقها!", ephemeral=True)
         await interaction.channel.delete()
 
-# --- الأوامر ---
+# --- الأحداث ومعالجة الرسائل ---
 @bot.event
-async def on_ready(): print(f'✅ {bot.user} جاهز للعمل')
+async def on_ready():
+    print(f'✅ {bot.user} جاهز للعمل في مدينة الخليج')
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user: return
+    await bot.process_commands(message) # هذا السطر ضروري لعمل الأوامر
+
+# --- الأوامر المنفصلة ---
+
+@bot.command()
+async def سيت_اب_رحلات(ctx):
+    await ctx.send("🎮 **تحكم بالرحلات والطقس**", view=TripControl())
+
+@bot.command()
+async def سيت_اب_تذاكر(ctx):
+    view = discord.ui.View()
+    btn = discord.ui.Button(label="فتح تذكرة 🎫", style=discord.ButtonStyle.success)
+    async def tkt_c(i):
+        ch = await i.guild.create_text_channel(f"تذكرة-{i.user.name}")
+        await ch.send(f"مرحباً {i.user.mention}، انتظر الإدارة.", view=TicketControl())
+        await i.response.send_message(f"فتحت تذكرتك: {ch.mention}", ephemeral=True)
+    btn.callback = tkt_c
+    view.add_item(btn)
+    await ctx.send("🎫 **قسم التواصل مع الإدارة**", view=view)
+
+@bot.command()
+async def سيت_اب_هوية(ctx):
+    view = discord.ui.View()
+    btn_in = discord.ui.Button(label="تسجيل دخول 📥", style=discord.ButtonStyle.primary)
+    async def in_c(i): await i.response.send_message(f"📥 المواطن {i.user.mention} سجل **دخول** الآن.")
+    btn_in.callback = in_c
+    btn_out = discord.ui.Button(label="تسجيل خروج 📤", style=discord.ButtonStyle.danger)
+    async def out_c(i): await i.response.send_message(f"📤 المواطن {i.user.mention} سجل **خروج** الآن.")
+    btn_out.callback = out_c
+    view.add_item(btn_in); view.add_item(btn_out)
+    await ctx.send("💳 **نظام الحضور والغياب للهوية**", view=view)
 
 @bot.command()
 async def انشاء_هوية(ctx):
     def check(m): return m.author == ctx.author and m.channel == ctx.channel
     await ctx.send("👤 اسمك في الـ RP؟"); name = await bot.wait_for('message', check=check)
     await ctx.send("🎂 عمرك؟"); age = await bot.wait_for('message', check=check)
-    await ctx.send("🌍 مكان الولادة؟"); place = await bot.wait_for('message', check=check)
-    
-    embed = discord.Embed(title="💳 طلب هوية RP", color=discord.Color.blue())
-    embed.add_field(name="المواطن:", value=ctx.author.mention, inline=False)
-    embed.add_field(name="الاسم:", value=name.content, inline=True)
-    embed.add_field(name="العمر:", value=age.content, inline=True)
-    embed.add_field(name="المكان:", value=place.content, inline=True)
-    
-    await ctx.send("✅ تم إرسال طلبك للإدارة.")
-    await ctx.send("📥 **مراجعة هوية:**", embed=embed, view=IdentityReview(ctx.author))
+    embed = discord.Embed(title="💳 طلب مراجعة هوية", description=f"المواطن: {ctx.author.mention}\nالاسم: {name.content}\nالعمر: {age.content}", color=discord.Color.blue())
+    await ctx.send("✅ تم الإرسال للإدارة.")
+    await ctx.send("📥 **طلب مراجعة جديد:**", embed=embed, view=IdentityReview(ctx.author))
 
 @bot.command()
-async def سيت_اب(ctx):
-    view = discord.ui.View()
-    # زر الرحلة
-    btn_trip = discord.ui.Button(label="إعلان رحلة ✈️", style=discord.ButtonStyle.secondary)
-    async def trip_c(i): await i.response.send_modal(TripModal())
-    btn_trip.callback = trip_c
-    
-    # زر التكت
-    btn_tkt = discord.ui.Button(label="فتح تذكرة 🎫", style=discord.ButtonStyle.success)
-    async def tkt_c(i):
-        ch = await i.guild.create_text_channel(f"تذكرة-{i.user.name}")
-        await ch.send(f"مرحباً {i.user.mention}، انتظر الإدارة.", view=TicketControl())
-        await i.response.send_message(f"فتحت تذكرتك: {ch.mention}", ephemeral=True)
-    btn_tkt.callback = tkt_c
-
-    # زر دخول هوية
-    btn_in = discord.ui.Button(label="تسجيل دخول هوية 📥", style=discord.ButtonStyle.primary)
-    async def in_c(i): await i.response.send_message(f"📥 المواطن {i.user.mention} سجل **دخول** للهوية الآن.")
-    btn_in.callback = in_c
-
-    # زر خروج هوية
-    btn_out = discord.ui.Button(label="تسجيل خروج هوية 📤", style=discord.ButtonStyle.danger)
-    async def out_c(i): await i.response.send_message(f"📤 المواطن {i.user.mention} سجل **خروج** للهوية الآن.")
-    btn_out.callback = out_c
-
-    view.add_item(btn_trip); view.add_item(btn_tkt); view.add_item(btn_in); view.add_item(btn_out)
-    await ctx.send("🎮 **لوحة خدمات مدينة الخليج الموحدة**", view=view)
-
-@bot.command(name="خط")
-async def line(ctx):
+async def خط(ctx):
     await ctx.message.delete()
     await ctx.send("💜 ▬▬▬▬▬▬▬▬▬ **GULF TOWN** ▬▬▬▬▬▬▬▬▬ 💜")
 
+# --- التشغيل ---
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
