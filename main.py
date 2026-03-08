@@ -1,4 +1,13 @@
 import os
+from flask import Flask
+from threading import Thread
+app = Flask('')
+@app.route('/')
+def home(): return "I am alive"
+def run(): app.run(host='0.0.0.0', port=8080)
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 import discord
 from discord.ext import commands
 import asyncio
@@ -94,10 +103,27 @@ async def on_ready():
     bot.add_view(TicketControlView())
     print(f"✅ {bot.user} جاهز للعمل في مدينة الخليج!")
 
-# التوكن حقك
-bot.run(os.getenv('DISCORD_TOKEN'))
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "I am alive"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+keep_alive()
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def مسح(ctx, amount: int):
     await ctx.channel.purge(limit=amount + 1)
-    await ctx.send(f'✅ تم مسح {amount} رسالة بنجاح في مدينة الخليج!', delete_after=5)
+    await ctx.send(f'✅ تم مسح {amount} رسالة بنجاح في مدينة    
+    bot.run(os.getenv('DISCORD_TOKEN'))
+    الخليج!', delete_after=5)
