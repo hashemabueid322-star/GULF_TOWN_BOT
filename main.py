@@ -16,7 +16,7 @@ import asyncio
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True 
-bot = commands.Bot(command_prefix='-', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 # أسماء الرتب (تأكد إنها نفس اللي بسيرفرك)
 STAFF_ROLE = "Support"      # رتبة الإدارة لاستلام التذاكر
