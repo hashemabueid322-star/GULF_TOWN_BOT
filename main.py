@@ -94,7 +94,7 @@ async def on_ready():
     print(f"✅ {bot.user} جاهز للعمل في مدينة الخليج!")
 
 # التوكن حقك
-bot.run('MTQ3OTA5NTMxMDA1OTA0NDk1NA.GZvNlW.yfC7s-gfCI8ioZvFcpz0lnDU0wz2q1jCteHhcE')
+bot.run(os.getenv('DISCORD_TOKEN'))
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def مسح(ctx, amount: int):
