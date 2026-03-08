@@ -61,7 +61,7 @@ class OpenTicketView(discord.ui.View):
         await interaction.response.send_message(f"✅ تم فتح تذكرتك: {channel.mention}", ephemeral=True)
 
 # --- الأوامر العامة لمدينة الخليج ---
-@bot.command()
+@bot.command(name="خط", aliases=["الخط"])
 async def خط(ctx):
     await ctx.message.delete()
     await ctx.send("💜 ▬▬▬▬▬▬▬▬▬▬ **GT** ▬▬▬▬▬▬▬▬▬▬ 💜")
