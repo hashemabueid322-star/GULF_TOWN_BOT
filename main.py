@@ -120,4 +120,9 @@ async def مسح(ctx, amount: int):
 
 # تشغيل الموقع الوهمي ثم البوت
 keep_alive()
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+    await bot.process_commands(message) # هذا السطر هو اللي يمرر الكلام للأوامر
 bot.run(os.getenv('DISCORD_TOKEN'))
