@@ -95,3 +95,8 @@ async def on_ready():
 
 # التوكن حقك
 bot.run('MTQ3OTA5NTMxMDA1OTA0NDk1NA.GZvNlW.yfC7s-gfCI8ioZvFcpz0lnDU0wz2q1jCteHhcE')
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def مسح(ctx, amount: int):
+    await ctx.channel.purge(limit=amount + 1)
+    await ctx.send(f'✅ تم مسح {amount} رسالة بنجاح في مدينة الخليج!', delete_after=5)
