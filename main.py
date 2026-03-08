@@ -118,12 +118,12 @@ app = Flask('')
 def home():
     return "I am alive"
 
-def run():
-    app.run(host='0.0.0.0', port=8080)
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def مسح(ctx, amount: int):
+    await ctx.channel.purge(limit=amount + 1)
+    await ctx.send(f'✅ تم مسح {amount} رسالة في مدينة الخليج', delete_after=5)
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
+# تشغيل الموقع الوهمي ثم البوت
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
