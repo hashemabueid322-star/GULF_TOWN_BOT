@@ -103,6 +103,12 @@ async def on_ready():
     bot.add_view(TicketControlView())
     print(f"✅ {bot.user} جاهز للعمل في مدينة الخليج!")
 
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def مسح(ctx, amount: int):
+    await ctx.channel.purge(limit=amount + 1)
+    await ctx.send(f'✅ تم مسح {amount} رسالة في مدينة الخليج', delete_after=5)
+
 from flask import Flask
 from threading import Thread
 
@@ -119,14 +125,5 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-keep_alive()
-
-@bot.command()
-@commands.has_permissions(manage_messages=True)
-async def مسح(ctx, amount: int):
-    await ctx.channel.purge(limit=amount + 1)
-    await ctx.send(f'✅ تم مسح {amount} رسالة في مدينة الخليج', delete_after=5)
-
-# تشغيل الموقع الوهمي ثم البوت
 keep_alive()
 bot.run(os.getenv('DISCORD_TOKEN'))
