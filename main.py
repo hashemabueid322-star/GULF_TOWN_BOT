@@ -1,128 +1,139 @@
 import os
-from flask import Flask
-from threading import Thread
-app = Flask('')
-@app.route('/')
-def home(): return "I am alive"
-def run(): app.run(host='0.0.0.0', port=8080)
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
 import discord
 from discord.ext import commands
+from flask import Flask
+from threading import Thread
 import asyncio
 
-# --- إعدادات مدينة الخليج GULF TOWN ---
+# --- تشغيل السيرفر لبقاء البوت Live ---
+app = Flask('')
+@app.route('/')
+def home(): return "Gulf Town RP is Online!"
+
+def run(): app.run(host='0.0.0.0', port=8080)
+def keep_alive(): Thread(target=run).start()
+
+# --- إعدادات البوت ---
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True 
-bot = commands.Bot(command_prefix='!', intents=intents)
+intents.members = True
+bot = commands.Bot(command_prefix='-', intents=intents)
 
-# أسماء الرتب (تأكد إنها نفس اللي بسيرفرك)
-STAFF_ROLE = "Support"      # رتبة الإدارة لاستلام التذاكر
-MEMBER_ROLE = "Citizen"    # الرتبة اللي تنعطى وقت التفعيل
+# --- الأيدي (IDs) الخاصة بالرتب ---
+RP_ROLE_ID = 1479535297917354077     # رتبة الـ RP
+STAFF_ROLE_ID = 1479535409863201014   # رتبة الإدارة
 
-# --- نظام التذاكر (Tickets) مع حماية الإغلاق ---
-class TicketControlView(discord.ui.View):
+# --- نظام مراجعة الهوية ---
+class IdentityReview(discord.ui.View):
+    def __init__(self, applicant):
+        super().__init__(timeout=None)
+        self.applicant = applicant
+
+    @discord.ui.button(label="قبول الهوية ✅", style=discord.ButtonStyle.success)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.guild.get_role(STAFF_ROLE_ID) not in interaction.user.roles:
+            return await interaction.response.send_message("❌ للإدارة فقط!", ephemeral=True)
+        
+        rp_role = interaction.guild.get_role(RP_ROLE_ID)
+        if rp_role:
+            await self.applicant.add_roles(rp_role)
+            await interaction.message.delete()
+            await interaction.channel.send(f"✅ تم قبول هوية {self.applicant.mention} ومنحه رتبة الـ RP!")
+
+    @discord.ui.button(label="رفض ❌", style=discord.ButtonStyle.danger)
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.guild.get_role(STAFF_ROLE_ID) not in interaction.user.roles:
+            return await interaction.response.send_message("❌ للإدارة فقط!", ephemeral=True)
+        await interaction.message.delete()
+        await interaction.channel.send(f"❌ تم رفض طلب هوية {self.applicant.mention}.")
+
+# --- نظام الرحلات (Modal) ---
+class TripModal(discord.ui.Modal, title="إنشاء رحلة جديدة ✈️"):
+    time = discord.ui.TextInput(label="الموعد", placeholder="مثال: 10:00 مساءً")
+    helper = discord.ui.TextInput(label="المساعد", placeholder="اسم المساعد")
+    details = discord.ui.TextInput(label="التفاصيل", style=discord.TextStyle.paragraph)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        embed = discord.Embed(title="✈️ إعلان رحلة: مدينة الخليج", color=discord.Color.gold())
+        embed.add_field(name="📅 الموعد:", value=self.time.value, inline=False)
+        embed.add_field(name="👨‍✈️ المساعد:", value=self.helper.value, inline=True)
+        embed.add_field(name="📝 التفاصيل:", value=self.details.value, inline=False)
+        await interaction.response.send_message(content="@everyone", embed=embed)
+
+# --- نظام التذاكر ---
+class TicketControl(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.claimed_by = None
 
-    @discord.ui.button(label="استلام التذكرة 🤝", style=discord.ButtonStyle.blurple, custom_id="claim_btn")
+    @discord.ui.button(label="استلام 🤝", style=discord.ButtonStyle.primary)
     async def claim(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not any(role.name == STAFF_ROLE for role in interaction.user.roles) and not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message("عذراً، هذا الأمر للإدارة فقط! ❌", ephemeral=True)
-        
+        if interaction.guild.get_role(STAFF_ROLE_ID) not in interaction.user.roles:
+            return await interaction.response.send_message("❌ للإدارة فقط!", ephemeral=True)
         self.claimed_by = interaction.user
         button.disabled = True
-        button.label = f"مستلمة بواسطة {interaction.user.name}"
+        button.label = f"استلمها: {interaction.user.name}"
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(f"✅ {interaction.user.mention} استلم التذكرة وسيقوم بمساعدتك.")
 
-    @discord.ui.button(label="إغلاق 🔒", style=discord.ButtonStyle.red, custom_id="close_btn")
+    @discord.ui.button(label="إغلاق 🔒", style=discord.ButtonStyle.danger)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.guild_permissions.administrator or (self.claimed_by and interaction.user.id == self.claimed_by.id):
-            await interaction.response.send_message("🔒 سيتم إغلاق التذكرة خلال 5 ثوانٍ...")
-            await asyncio.sleep(5)
-            await interaction.channel.delete()
-        else:
-            await interaction.response.send_message("❌ لا يمكنك إغلاق التذكرة إلا إذا كنت أنت المستلم أو إداري!", ephemeral=True)
+        if interaction.user != self.claimed_by:
+            return await interaction.response.send_message("❌ فقط المستلم يغلقها!", ephemeral=True)
+        await interaction.channel.delete()
 
-class OpenTicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="فتح تذكرة 🎫", style=discord.ButtonStyle.green, custom_id="open_btn")
-    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        channel = await interaction.guild.create_text_channel(f'ticket-{interaction.user.name}')
-        await channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
-        await channel.set_permissions(interaction.guild.default_role, read_messages=False)
-        await channel.send(f"مرحباً {interaction.user.mention}، انتظر رد الإدارة.", view=TicketControlView())
-        await interaction.response.send_message(f"✅ تم فتح تذكرتك: {channel.mention}", ephemeral=True)
-
-# --- الأوامر العامة لمدينة الخليج ---
-@bot.command(name="خط", aliases=["الخط"])
-async def خط(ctx):
-    await ctx.message.delete()
-    await ctx.send("💜 ▬▬▬▬▬▬▬▬▬▬ **GT** ▬▬▬▬▬▬▬▬▬▬ 💜")
+# --- الأوامر ---
+@bot.event
+async def on_ready(): print(f'✅ {bot.user} جاهز للعمل')
 
 @bot.command()
-@commands.has_permissions(manage_roles=True)
-async def تفعيل(ctx, member: discord.Member, *, name: str):
-    role = discord.utils.get(ctx.guild.roles, name=MEMBER_ROLE)
-    if role:
-        await member.add_roles(role)
-        await member.edit(nick=f"GT | {name}")
-        await ctx.send(f"✅ تم تفعيل {member.mention} بنجاح باسم: **{name}**")
+async def انشاء_هوية(ctx):
+    def check(m): return m.author == ctx.author and m.channel == ctx.channel
+    await ctx.send("👤 اسمك في الـ RP؟"); name = await bot.wait_for('message', check=check)
+    await ctx.send("🎂 عمرك؟"); age = await bot.wait_for('message', check=check)
+    await ctx.send("🌍 مكان الولادة؟"); place = await bot.wait_for('message', check=check)
+    
+    embed = discord.Embed(title="💳 طلب هوية RP", color=discord.Color.blue())
+    embed.add_field(name="المواطن:", value=ctx.author.mention, inline=False)
+    embed.add_field(name="الاسم:", value=name.content, inline=True)
+    embed.add_field(name="العمر:", value=age.content, inline=True)
+    embed.add_field(name="المكان:", value=place.content, inline=True)
+    
+    await ctx.send("✅ تم إرسال طلبك للإدارة.")
+    await ctx.send("📥 **مراجعة هوية:**", embed=embed, view=IdentityReview(ctx.author))
 
 @bot.command()
-@commands.has_permissions(administrator=True)
-async def تنبيه(ctx, *, text: str):
-    await ctx.message.delete()
-    embed = discord.Embed(title="📢 تنبيه من إدارة GULF TOWN", description=text, color=0x9b59b6)
-    embed.set_footer(text=f"المرسل: {ctx.author.name}")
-    await ctx.send(content="@everyone", embed=embed)
-
-@bot.command()
-async def هوية(ctx, name: str, age: str, loc: str):
-    embed = discord.Embed(title="💳 بطاقة هوية مدينة الخليج", color=0x9b59b6)
-    embed.add_field(name="الاسم:", value=name, inline=True)
-    embed.add_field(name="العمر:", value=age, inline=True)
-    embed.add_field(name="المنطقة:", value=loc, inline=True)
-    embed.set_thumbnail(url=ctx.author.avatar.url)
-    await ctx.send(embed=embed)
-
-@bot.command()
-@commands.has_permissions(administrator=True)
 async def سيت_اب(ctx):
-    await ctx.send("🌴 **لوحة تحكم مدينة الخليج (GULF TOWN)** 🌴", view=OpenTicketView())
+    view = discord.ui.View()
+    # زر الرحلة
+    btn_trip = discord.ui.Button(label="إعلان رحلة ✈️", style=discord.ButtonStyle.secondary)
+    async def trip_c(i): await i.response.send_modal(TripModal())
+    btn_trip.callback = trip_c
+    
+    # زر التكت
+    btn_tkt = discord.ui.Button(label="فتح تذكرة 🎫", style=discord.ButtonStyle.success)
+    async def tkt_c(i):
+        ch = await i.guild.create_text_channel(f"تذكرة-{i.user.name}")
+        await ch.send(f"مرحباً {i.user.mention}، انتظر الإدارة.", view=TicketControl())
+        await i.response.send_message(f"فتحت تذكرتك: {ch.mention}", ephemeral=True)
+    btn_tkt.callback = tkt_c
 
-@bot.event
-async def on_ready():
-    bot.add_view(OpenTicketView())
-    bot.add_view(TicketControlView())
-    print(f"✅ {bot.user} جاهز للعمل في مدينة الخليج!")
+    # زر دخول هوية
+    btn_in = discord.ui.Button(label="تسجيل دخول هوية 📥", style=discord.ButtonStyle.primary)
+    async def in_c(i): await i.response.send_message(f"📥 المواطن {i.user.mention} سجل **دخول** للهوية الآن.")
+    btn_in.callback = in_c
 
-from flask import Flask
-from threading import Thread
+    # زر خروج هوية
+    btn_out = discord.ui.Button(label="تسجيل خروج هوية 📤", style=discord.ButtonStyle.danger)
+    async def out_c(i): await i.response.send_message(f"📤 المواطن {i.user.mention} سجل **خروج** للهوية الآن.")
+    btn_out.callback = out_c
 
-app = Flask('')
+    view.add_item(btn_trip); view.add_item(btn_tkt); view.add_item(btn_in); view.add_item(btn_out)
+    await ctx.send("🎮 **لوحة خدمات مدينة الخليج الموحدة**", view=view)
 
-@app.route('/')
-def home():
-    return "I am alive"
+@bot.command(name="خط")
+async def line(ctx):
+    await ctx.message.delete()
+    await ctx.send("💜 ▬▬▬▬▬▬▬▬▬ **GULF TOWN** ▬▬▬▬▬▬▬▬▬ 💜")
 
-@bot.command()
-@commands.has_permissions(manage_messages=True)
-async def مسح(ctx, amount: int):
-    await ctx.channel.purge(limit=amount + 1)
-    await ctx.send(f'✅ تم مسح {amount} رسالة في مدينة الخليج', delete_after=5)
-
-# تشغيل الموقع الوهمي ثم البوت
 keep_alive()
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-    await bot.process_commands(message) # هذا السطر هو اللي يمرر الكلام للأوامر
 bot.run(os.getenv('DISCORD_TOKEN'))
